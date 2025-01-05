@@ -37,6 +37,7 @@ def check_accounts():
                 session.query(Database).filter(Database.uid == account).update({"last_count": acc.last_count + 1})
                 session.commit()
     s.enter(30, 1, check_accounts) # Add self back to event queue
+    session.close()
 
 def send_tweet(content: str, media: list[str], author: str):
     bot.send_message(environ.get("CHAT_ID", ""), f"{author}: {content}\n{'\n'.join(media)}")
