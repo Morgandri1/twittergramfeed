@@ -15,7 +15,7 @@ DATABASE_URL = environ.get('DATABASE_URL', '')
 # Create the engine
 engine = create_engine(
     DATABASE_URL,
-    echo=True,          # Turn this off in production
+    echo=False,          # Turn this off in production
     pool_size=5,
     max_overflow=10
 )

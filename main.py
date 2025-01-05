@@ -40,7 +40,7 @@ def check_accounts():
     session.close()
 
 def send_tweet(content: str, media: list[str], author: str):
-    bot.send_message(environ.get("CHAT_ID", ""), f"{author}: {content}\n{'\n'.join(media)}")
+    bot.send_message(environ.get("CHAT_ID", ""), f"{author}: {content} {'\n'}{'\n'.join(media)}")
     
 @bot.message_handler(commands=["subscribe"])
 def subscribe(message):
