@@ -104,6 +104,15 @@ def should_check_batch(uids: list[str], counts: list[int]):
         c = user["result"]["legacy"]["statuses_count"] - counts[uids.index(user["result"]["rest_id"])]
         yield (user["result"]["rest_id"], c * -1 if c < 0 else c)
         
+def get_baseline(uids: list[str]):
+    if not uids:
+        return []
+    q = {"users": ",".join(uids)}
+    req = requests.get(URL + "/get-users", params=q, headers=HEADERS)
+    for user in req.json()["result"]["data"]["users"]:
+        c = user["result"]["legacy"]["statuses_count"]
+        yield (user["result"]["rest_id"], c)
+        
 def get_user_info(uid: str):
     q = {"users": uid}
     req = requests.get(URL + "/get-users", params=q, headers=HEADERS)

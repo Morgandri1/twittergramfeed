@@ -1,6 +1,6 @@
 from os import environ
 from database import Bot as Database, add_watched_account, SessionLocal
-from twitter import should_check_batch, get_tweets, get_user_from_handle, get_handle
+from twitter import should_check_batch, get_tweets, get_user_from_handle, get_handle, get_baseline
 from dotenv import load_dotenv
 from sched import scheduler
 from time import sleep, time
@@ -37,6 +37,23 @@ def check_accounts():
                 session.query(Database).filter(Database.uid == account).update({"last_count": acc.last_count + 1})
                 session.commit()
     s.enter(30, 1, check_accounts) # Add self back to event queue
+    session.close()
+    
+def set_baseline():
+    """
+    Just in case, set the baseline statuses_count for all active accounts and update it when the bot starts up. only fetching new tweets.
+    """
+    session = SessionLocal()
+    accounts = session.query(Database).filter(Database.active == True).all()
+    baselines = get_baseline([str(a.uid) for a in accounts])
+    for (account, baseline) in baselines:
+        user = get_user_from_handle(account.username)
+        if not user: raise ValueError("Failed to get user.")
+        session.query(Database) \
+            .filter(Database.uid == account) \
+            .update({"last_count": baseline})
+        session.commit()
+    print("Updated all accounts' baseline statuses_count.")
     session.close()
 
 def send_tweet(content: str, media: list[str], author: str):
@@ -98,7 +115,8 @@ def verify_channel():
         print(f"Failed to verify channel: {e}")
         return False
   
-s.enter(30, 1, check_accounts) 
+s.enter(90, 1, check_accounts) 
 s.enter(5, 2, verify_channel)
+s.enter(5, 3, set_baseline)
 Thread(target=bot.polling, kwargs={"non_stop":True}).start()
 Thread(target=s.run).start()
