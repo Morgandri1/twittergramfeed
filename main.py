@@ -47,8 +47,6 @@ def set_baseline():
     accounts = session.query(Database).filter(Database.active == True).all()
     baselines = get_baseline([str(a.uid) for a in accounts])
     for (account, baseline) in baselines:
-        user = get_user_from_handle(account.username)
-        if not user: raise ValueError("Failed to get user.")
         session.query(Database) \
             .filter(Database.uid == account) \
             .update({"last_count": baseline})
