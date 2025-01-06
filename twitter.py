@@ -27,6 +27,17 @@ def get_tweet(tweet_id: str):
     req = requests.get(URL + "/tweet", params={"pid": tweet_id}, headers=HEADERS)
     try:
         data = req.json()["tweet"]
+        if data.get("note_tweet", False):
+            return Tweet(
+                tweet_id,
+                created_at=data["created_at"],
+                full_text=data["note_tweet"]["note_tweet_results"]["result"]["text"],
+                favorite_count=data["favorite_count"],
+                retweet_count=data["retweet_count"],
+                author=data["user_id_str"],
+                media=[m["media_url_https"] for m in data["entities"]["media"]]
+            )
+            
         return Tweet(
             tweet_id,
             created_at=data["created_at"],
