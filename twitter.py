@@ -33,8 +33,8 @@ def get_tweet(tweet_id: str):
             full_text=data["full_text"],
             favorite_count=data["favorite_count"],
             retweet_count=data["retweet_count"],
-            author=data["author_id"],
-            media=[m["url"] for m in data["media"]]
+            author=data["user_id_str"],
+            media=[m["media_url_https"] for m in data["entities"]["media"]]
         )
     except KeyError:
         print(req.json())
