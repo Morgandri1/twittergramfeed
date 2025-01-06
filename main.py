@@ -1,6 +1,6 @@
 from os import environ
 from database import Bot as Database, add_watched_account, SessionLocal
-from twitter import should_check_batch, get_tweets, get_user_from_handle, get_handle, get_baseline
+from twitter import should_check_batch, get_tweets, get_user_from_handle, get_handle, get_baseline, get_tweet
 from dotenv import load_dotenv
 from sched import scheduler
 from time import sleep, time
@@ -31,6 +31,9 @@ def check_accounts():
                 print(f"Failed to get tweets for {account}")
                 continue
             for tweet in tweets:
+                if tweet.full_text.endswith("..."):
+                    tweet = get_tweet(tweet.tweet_id)
+                if not tweet: continue
                 send_tweet(tweet.full_text, tweet.media, tweet.author)
                 acc = session.query(Database).filter(Database.uid == account).first()
                 if not acc: raise ValueError("Failed to find account in database.")
