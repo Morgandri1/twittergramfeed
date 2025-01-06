@@ -1,4 +1,6 @@
 from os import environ
+
+from telebot.types import MessageEntity
 from database import Bot as Database, add_watched_account, SessionLocal
 from twitter import should_check_batch, get_tweets, get_user_from_handle, get_handle, get_baseline, get_tweet
 from dotenv import load_dotenv
@@ -34,7 +36,7 @@ def check_accounts():
                 if tweet.full_text.endswith("..."):
                     tweet = get_tweet(tweet.tweet_id)
                 if not tweet: continue
-                send_tweet(tweet.full_text, tweet.media, tweet.author)
+                send_tweet(tweet.full_text, tweet.media, tweet.author, tweet.tweet_id)
                 acc = session.query(Database).filter(Database.uid == account).first()
                 if not acc: raise ValueError("Failed to find account in database.")
                 session.query(Database).filter(Database.uid == account).update({"last_count": acc.last_count + 1})
@@ -57,8 +59,12 @@ def set_baseline():
     print("Updated all accounts' baseline statuses_count.")
     session.close()
 
-def send_tweet(content: str, media: list[str], author: str):
-    bot.send_message(environ.get("CHAT_ID", ""), f"{author}: {content}" + '\n' + '\n'.join(media))
+def send_tweet(content: str, media: list[str], author: str, tid: str):
+    bot.send_message(
+        environ.get("CHAT_ID", ""), 
+        f"[{author}](https://x.com/{author}/status/{tid}): {content}" + '\n' + '\n'.join(media),
+        parse_mode="MarkdownV2",
+    )
     
 @bot.message_handler(commands=["subscribe"])
 def subscribe(message):
