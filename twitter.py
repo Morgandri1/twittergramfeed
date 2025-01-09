@@ -31,7 +31,7 @@ def get_tweet(tweet_id: str):
             return Tweet(
                 tweet_id,
                 created_at=data.get("created_at"),
-                full_text=data["note_tweet"]["note_tweet_results"]["result"]["text"].replace(".", r"\."),
+                full_text=data["note_tweet"]["note_tweet_results"]["result"]["text"],
                 favorite_count=data.get("favorite_count"),
                 retweet_count=data.get("retweet_count"),
                 author=data.get("user_id_str"),
@@ -41,7 +41,7 @@ def get_tweet(tweet_id: str):
         return Tweet(
             tweet_id,
             created_at=data.get("created_at"),
-            full_text=data["full_text"].replace(".", r"\."),
+            full_text=data["full_text"],
             favorite_count=data.get("favorite_count"),
             retweet_count=data.get("retweet_count"),
             author=data.get("user_id_str"),
