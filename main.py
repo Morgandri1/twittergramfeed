@@ -1,6 +1,5 @@
 from os import environ
 
-from telebot.types import MessageEntity
 from database import Bot as Database, add_watched_account, SessionLocal
 from twitter import should_check_batch, get_tweets, get_user_from_handle, get_handle, get_baseline, get_tweet
 from dotenv import load_dotenv
@@ -25,10 +24,7 @@ def check_accounts():
             
         if new:
             print(new)
-            tweets = get_tweets(account, new) 
-            if len(tweets) > new: 
-                print(f"retrieved too many tweets! {len(tweets)} > {new}")
-                tweets = tweets[:int(new)]
+            tweets, ignored = get_tweets(account, new) 
             if not tweets:
                 print(f"Failed to get tweets for {account}")
                 continue
@@ -39,8 +35,9 @@ def check_accounts():
                 send_tweet(tweet.full_text, tweet.media, tweet.author, tweet.tweet_id)
                 acc = session.query(Database).filter(Database.uid == account).first()
                 if not acc: raise ValueError("Failed to find account in database.")
-                session.query(Database).filter(Database.uid == account).update({"last_count": acc.last_count + 1})
-                session.commit()
+                session.query(Database).filter(Database.uid == account).update({"last_count": acc.last_count + 1 + ignored})
+                ignored = 0 # cheeky
+    session.commit()
     s.enter(90, 1, check_accounts) # Add self back to event queue
     session.close()
     

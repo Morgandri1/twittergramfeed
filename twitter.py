@@ -31,7 +31,7 @@ def get_tweet(tweet_id: str):
             return Tweet(
                 tweet_id,
                 created_at=data.get("created_at"),
-                full_text=data["note_tweet"]["note_tweet_results"]["result"]["text"],
+                full_text=data["note_tweet"]["note_tweet_results"]["result"]["text"].replace(".", r"\."),
                 favorite_count=data.get("favorite_count"),
                 retweet_count=data.get("retweet_count"),
                 author=data.get("user_id_str"),
@@ -41,11 +41,11 @@ def get_tweet(tweet_id: str):
         return Tweet(
             tweet_id,
             created_at=data.get("created_at"),
-            full_text=data["full_text"],
+            full_text=data["full_text"].replace(".", r"\."),
             favorite_count=data.get("favorite_count"),
             retweet_count=data.get("retweet_count"),
             author=data.get("user_id_str"),
-            media=[m["media_url_https"] for m in data["entities"]["media"]]
+            media=[m["media_url_https"] for m in data["entities"].get("media", [])]
         )
     except KeyError:
         print(req.json())
@@ -88,14 +88,14 @@ def get_handle(link: str) -> str:
 def get_tweets(uid: str, count: int = 20):
     req = requests.get(URL + "/user-tweets", params={"user":uid,"count":count}, headers=HEADERS)
     try:
-        return parse_tweets(req.json())
+        return parse_tweets(req.json(), count)
     except KeyError:
         print(req.json())
         return []
     
 def get_most_recent_tweet(uid: str):
     req = requests.get(URL + "/user-tweets", params={"user":uid,"count":1}, headers=HEADERS)
-    return parse_tweets(req.json())[0]
+    return parse_tweets(req.json(), 1)[0]
     
 def should_check(uid: str, last: int) -> int:
     q = {"users": uid}
@@ -133,8 +133,9 @@ def get_user_info(uid: str):
     except:
         print(req.json())
         
-def parse_tweets(api_response: Dict[str, Any]) -> List[Tweet]:
+def parse_tweets(api_response: Dict[str, Any], limit: int) -> tuple[List[Tweet], int]:
     all_tweets: List[Tweet] = []
+    ignored = 0
 
     # Navigate into the JSON where instructions are located
     instructions = api_response["result"]["timeline"]["instructions"]
@@ -150,6 +151,7 @@ def parse_tweets(api_response: Dict[str, Any]) -> List[Tweet]:
                 maybe_tweet = _extract_tweet_from_entry(entry)
                 if maybe_tweet is not None:
                     all_tweets.append(maybe_tweet)
+                else: ignored += 1
 
         # Some timelines have pinned tweets in "TimelinePinEntry"
         elif instruction.get("type") == "TimelinePinEntry":
@@ -160,8 +162,13 @@ def parse_tweets(api_response: Dict[str, Any]) -> List[Tweet]:
         maybe_tweet = _extract_tweet_from_entry(pinned_entry)
         if maybe_tweet is not None:
             all_tweets.append(maybe_tweet)
+        else: ignored += 1
 
-    return all_tweets
+    if len(all_tweets) > limit: 
+        print(f"retrieved too many tweets! {len(all_tweets)} > {limit}")
+        all_tweets = all_tweets[:int(limit-1)]
+
+    return (all_tweets, ignored)
 
 def _extract_tweet_from_entry(entry: Dict[str, Any]) -> Optional[Tweet]:
     content = entry.get("content")
