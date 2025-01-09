@@ -41,7 +41,7 @@ def check_accounts():
                 if not acc: raise ValueError("Failed to find account in database.")
                 session.query(Database).filter(Database.uid == account).update({"last_count": acc.last_count + 1})
                 session.commit()
-    s.enter(30, 1, check_accounts) # Add self back to event queue
+    s.enter(90, 1, check_accounts) # Add self back to event queue
     session.close()
     
 def set_baseline():
@@ -60,11 +60,18 @@ def set_baseline():
     session.close()
 
 def send_tweet(content: str, media: list[str], author: str, tid: str):
-    bot.send_message(
-        environ.get("CHAT_ID", ""), 
-        f"[{author}](https://x.com/{author}/status/{tid}): {content}" + '\n' + '\n'.join(media),
-        parse_mode="MarkdownV2",
-    )
+    try:
+        bot.send_message(
+            environ.get("CHAT_ID", ""), 
+            f"[{author}](https://x.com/{author}/status/{tid}): {content}" + '\n' + '\n'.join(media),
+            parse_mode="MarkdownV2",
+        )
+    except Exception as e:
+        print(f"Failed to send tweet: {e}")
+        bot.send_message(
+            environ.get("CHAT_ID", ""), 
+            f"{author}: {content}" + '\n' + '\n'.join(media),
+        )
     
 @bot.message_handler(commands=["subscribe"])
 def subscribe(message):
@@ -122,7 +129,7 @@ def verify_channel():
         print(f"Failed to verify channel: {e}")
         return False
   
-s.enter(90, 1, check_accounts) 
+s.enter(30, 1, check_accounts) 
 s.enter(5, 2, verify_channel)
 s.enter(5, 3, set_baseline)
 Thread(target=bot.polling, kwargs={"non_stop":True}).start()

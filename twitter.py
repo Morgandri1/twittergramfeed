@@ -26,25 +26,25 @@ def get_user_from_handle(handle: str):
 def get_tweet(tweet_id: str):
     req = requests.get(URL + "/tweet", params={"pid": tweet_id}, headers=HEADERS)
     try:
-        data = req.json()["tweet"]
+        data = req.json().get("tweet")
         if data.get("note_tweet", False):
             return Tweet(
                 tweet_id,
-                created_at=data["created_at"],
+                created_at=data.get("created_at"),
                 full_text=data["note_tweet"]["note_tweet_results"]["result"]["text"],
-                favorite_count=data["favorite_count"],
-                retweet_count=data["retweet_count"],
-                author=data["user_id_str"],
-                media=[m["media_url_https"] for m in data["entities"]["media"]]
+                favorite_count=data.get("favorite_count"),
+                retweet_count=data.get("retweet_count"),
+                author=data.get("user_id_str"),
+                media=[m["media_url_https"] for m in data["entities"].get("media", [])]
             )
             
         return Tweet(
             tweet_id,
-            created_at=data["created_at"],
+            created_at=data.get("created_at"),
             full_text=data["full_text"],
-            favorite_count=data["favorite_count"],
-            retweet_count=data["retweet_count"],
-            author=data["user_id_str"],
+            favorite_count=data.get("favorite_count"),
+            retweet_count=data.get("retweet_count"),
+            author=data.get("user_id_str"),
             media=[m["media_url_https"] for m in data["entities"]["media"]]
         )
     except KeyError:
