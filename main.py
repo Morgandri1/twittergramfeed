@@ -16,30 +16,47 @@ bot = TeleBot(environ.get("TELEGRAM_TOKEN", ""))
 def check_accounts():
     session = SessionLocal()
     accounts = session.query(Database).filter(Database.active == True).all()
-    print([a.uid for a in accounts], [a.last_count for a in accounts])
-    for (account, new) in list(should_check_batch([str(a.uid) for a in accounts], [float(a.last_count) for a in accounts])): # pyright: ignore
-        if not account:
-            print(f"Failed to get UID for {account}")
-            break
-            
-        if new:
-            print(new)
-            tweets, ignored = get_tweets(account, new) 
-            if not tweets:
-                print(f"Failed to get tweets for {account}")
-                continue
-            for tweet in tweets:
-                if tweet.full_text.endswith("..."):
-                    tweet = get_tweet(tweet.tweet_id)
-                if not tweet: continue
-                send_tweet(tweet.full_text, tweet.media, tweet.author, tweet.tweet_id)
-                acc = session.query(Database).filter(Database.uid == account).first()
-                if not acc: raise ValueError("Failed to find account in database.")
-                session.query(Database).filter(Database.uid == account).update({"last_count": acc.last_count + 1 + ignored})
-                ignored = 0 # cheeky
+    
+    # Grab DB data
+    uids = [str(a.uid) for a in accounts]
+    last_counts = [int(a.last_count) for a in accounts]
+
+    # Query the “should_check_batch” in one go
+    # The difference is how many statuses the user posted since we last checked.
+    # Make sure we DO NOT invert negative differences.
+    check_info = list(should_check_batch(uids, last_counts))
+
+    for i, (account_uid, difference) in enumerate(check_info):
+        # If difference < 0, treat as 0 to avoid re‐fetching old tweets.
+        # Negative means they probably deleted tweets or the count is out of sync.
+        if difference < 0:
+            difference = 0
+
+        if difference > 0:
+            # For robust next step, we can just fetch up to difference new tweets 
+            # (or cap at some maximum like 20 or 50).
+            tweets, ignored = get_tweets(account_uid, difference)
+
+            # Then send them.
+            for tw in tweets:
+                # If pinned or old, skip. Or if you want pinned, handle accordingly.
+                send_tweet(tw.full_text, tw.media, tw.author, tw.tweet_id)
+
+            # Now look up the user’s actual, current status count so that we don’t
+            # keep incrementing “last_count” in small lumps.
+            # Or you could do: new_status_count = last_counts[i] + difference
+            user_info = session.query(Database).filter(Database.uid == account_uid)
+            if user_info:
+                statuses_count = user_info["legacy"]["statuses_count"]
+                # Update DB
+                session.query(Database).filter(Database.uid == account_uid).update(
+                    {"last_count": statuses_count}
+                )
     session.commit()
-    s.enter(90, 1, check_accounts) # Add self back to event queue
     session.close()
+
+    # Reschedule
+    s.enter(90, 1, check_accounts)
     
 def set_baseline():
     """
