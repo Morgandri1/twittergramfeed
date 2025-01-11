@@ -36,26 +36,16 @@ def check_accounts():
             for tw in tweets:
                 # If pinned or old, skip. Or if you want pinned, handle accordingly.
                 # Right now, we just send them all:
+                if tw.full_text.endswith("..."):
+                    tw = get_tweet(tw.tweet_id) or tw
                 send_tweet(tw.full_text, tw.media, tw.author, tw.tweet_id)
 
-            # NEW CODE: increment last_count by 1 for each skipped tweet
-            # (i.e., for each item in `ignored`).
             if ignored:
                 user_info = session.query(Database).filter(Database.uid == account_uid).first()
                 if user_info:
-                    skip_count = range(ignored)
                     session.query(Database).filter(Database.uid == account_uid).update(
-                        {"last_count": user_info.last_count + skip_count}
+                        {"last_count": float(user_info.last_count) + ignored}
                     )
-                    session.commit()
-
-            # Update the last_count by the difference in status counts
-            user_info = session.query(Database).filter(Database.uid == account_uid).first()
-            if user_info:
-                old = user_info.last_count
-                session.query(Database).filter(Database.uid == account_uid).update(
-                    {"last_count": old + difference}
-                )
 
     session.commit()
     session.close()

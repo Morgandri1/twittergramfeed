@@ -238,12 +238,9 @@ def _extract_tweet_from_entry(entry: Dict[str, Any]) -> Optional[Tweet]:
         # Extract user info
         core_user_data = tweet_data.get("core", {}).get("user_results", {}).get("result", {})
         user_legacy = core_user_data.get("legacy", {})
-        user_id = user_legacy.get("id_str", "")
         screen_name = user_legacy.get("screen_name", "")
-        name = user_legacy.get("name", "")
-        description = user_legacy.get("description", "")
-        statuses_count = user_legacy.get("statuses_count", 0)
 
+        
         media = legacy.get("entities", {}) \
                           .get("media", [])
         media_urls = [m.get("media_url_https", "") for m in media]
