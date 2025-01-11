@@ -72,7 +72,7 @@ def send_tweet(content: str, media: list[str], author: str, tid: str):
     try:
         bot.send_message(
             environ.get("CHAT_ID", ""), 
-            (f"[{author}](https://x.com/{author}/status/{tid}): {content}" + '\n' + '\n'.join(media)) \
+            f"[{author}](https://x.com/{author}/status/{tid})" + (f": {content}" + '\n' + '\n'.join(media)) \
                 .replace(".", r"\.") \
                 .replace("-", r"\-") \
                 .replace("(", r"\(") \
