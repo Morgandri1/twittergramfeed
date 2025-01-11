@@ -22,36 +22,41 @@ def check_accounts():
     last_counts = [int(a.last_count) for a in accounts]
 
     # Query the “should_check_batch” in one go
-    # The difference is how many statuses the user posted since we last checked.
-    # Make sure we DO NOT invert negative differences.
     check_info = list(should_check_batch(uids, last_counts))
 
     for i, (account_uid, difference) in enumerate(check_info):
-        # If difference < 0, treat as 0 to avoid re‐fetching old tweets.
-        # Negative means they probably deleted tweets or the count is out of sync.
         if difference < 0:
             difference = 0
 
         if difference > 0:
-            # For robust next step, we can just fetch up to difference new tweets 
-            # (or cap at some maximum like 20 or 50).
+            # Fetch new tweets
             tweets, ignored = get_tweets(account_uid, difference)
 
-            # Then send them.
+            # Post the tweets we want
             for tw in tweets:
                 # If pinned or old, skip. Or if you want pinned, handle accordingly.
+                # Right now, we just send them all:
                 send_tweet(tw.full_text, tw.media, tw.author, tw.tweet_id)
 
-            # Now look up the user’s actual, current status count so that we don’t
-            # keep incrementing “last_count” in small lumps.
-            # Or you could do: new_status_count = last_counts[i] + difference
-            user_info = session.query(Database).filter(Database.uid == account_uid)
+            # NEW CODE: increment last_count by 1 for each skipped tweet
+            # (i.e., for each item in `ignored`).
+            if ignored:
+                user_info = session.query(Database).filter(Database.uid == account_uid).first()
+                if user_info:
+                    skip_count = range(ignored)
+                    session.query(Database).filter(Database.uid == account_uid).update(
+                        {"last_count": user_info.last_count + skip_count}
+                    )
+                    session.commit()
+
+            # Update the last_count by the difference in status counts
+            user_info = session.query(Database).filter(Database.uid == account_uid).first()
             if user_info:
-                statuses_count = user_info["legacy"]["statuses_count"]
-                # Update DB
+                old = user_info.last_count
                 session.query(Database).filter(Database.uid == account_uid).update(
-                    {"last_count": statuses_count}
+                    {"last_count": old + difference}
                 )
+
     session.commit()
     session.close()
 
@@ -77,14 +82,32 @@ def send_tweet(content: str, media: list[str], author: str, tid: str):
     try:
         bot.send_message(
             environ.get("CHAT_ID", ""), 
-            f"[{author}](https://x.com/{author}/status/{tid}): {content}" + '\n' + '\n'.join(media),
+            (f"[{author}](https://x.com/{author}/status/{tid}): {content}" + '\n' + '\n'.join(media)) \
+                .replace(".", r"\.") \
+                .replace("-", r"\-") \
+                .replace("(", r"\(") \
+                .replace(")", r"\)") \
+                .replace("#", r"\#") \
+                .replace("!", r"\!") \
+                .replace(">", r"\>") \
+                .replace("~", r"\~") \
+                .replace("`", r"\`") \
+                .replace(":", r"\:") \
+                .replace("*", r"\*") \
+                .replace("_", r"\_") \
+                .replace("[", r"\[") \
+                .replace("]", r"\]") \
+                .replace("|", r"\|") \
+                .replace("{", r"\{") \
+                .replace("}", r"\}") \
+                .replace("+", r"\+"),
             parse_mode="MarkdownV2",
         )
     except Exception as e:
         print(f"Failed to send tweet: {e}")
         bot.send_message(
             environ.get("CHAT_ID", ""), 
-            f"{author}: {content}".replace(".", r"\.") + '\n' + '\n'.join(media),
+            f"{author}: {content}" + '\n' + '\n'.join(media),
         )
     
 @bot.message_handler(commands=["subscribe"])

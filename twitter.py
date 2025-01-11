@@ -35,7 +35,8 @@ def get_tweet(tweet_id: str):
                 favorite_count=data.get("favorite_count"),
                 retweet_count=data.get("retweet_count"),
                 author=data.get("user_id_str"),
-                media=[m["media_url_https"] for m in data["entities"].get("media", [])]
+                media=[m["media_url_https"] for m in data["entities"].get("media", [])],
+                sort_index=data.get("sort_index")
             )
             
         return Tweet(
@@ -45,7 +46,8 @@ def get_tweet(tweet_id: str):
             favorite_count=data.get("favorite_count"),
             retweet_count=data.get("retweet_count"),
             author=data.get("user_id_str"),
-            media=[m["media_url_https"] for m in data["entities"].get("media", [])]
+            media=[m["media_url_https"] for m in data["entities"].get("media", [])],
+            sort_index=data.get("sort_index")
         )
     except KeyError:
         print(req.json())
@@ -88,14 +90,14 @@ def get_handle(link: str) -> str:
 def get_tweets(uid: str, count: int = 20):
     req = requests.get(URL + "/user-tweets", params={"user":uid,"count":count}, headers=HEADERS)
     try:
-        return parse_tweets(req.json(), count)
+        return parse_tweets(req.json())
     except KeyError:
         print(req.json())
         return []
     
 def get_most_recent_tweet(uid: str):
     req = requests.get(URL + "/user-tweets", params={"user":uid,"count":1}, headers=HEADERS)
-    return parse_tweets(req.json(), 1)[0]
+    return parse_tweets(req.json())[0]
     
 def should_check(uid: str, last: int) -> int:
     q = {"users": uid}
@@ -133,111 +135,136 @@ def get_user_info(uid: str):
     except:
         print(req.json())
         
-def parse_tweets(api_response: Dict[str, Any], limit: int) -> tuple[List[Tweet], int]:
-    all_tweets: List[Tweet] = []
-    ignored = 0
-
-    # Navigate into the JSON where instructions are located
+def parse_tweets(api_response: Dict[str, Any]) -> (List[Tweet], int):
+    """
+    Parses the API response to return the newest tweets from a user, ignoring older pinned tweets.
+    
+    Args:
+        api_response (Dict[str, Any]): The JSON/dictionary response from Twitter’s API.
+    
+    Returns:
+        (tweets, skipped_count):
+            tweets (List[Tweet]): The list of parsed Tweet objects, newest first.
+            skipped_count (int): How many tweets were skipped (e.g., invalid entries or older pinned).
+    """
+    # The main timeline instructions
     instructions = api_response["result"]["timeline"]["instructions"]
-    # Also handle the possibility of pinned tweets existing outside "instructions"
-    pinned_entry = None
 
-    # The instructions block often holds the main timeline entries.
+    timeline_tweets: List[Tweet] = []
+    pinned_tweet: Optional[Tweet] = None
+    pinned_sort_index: Optional[str] = None
+
+    # Track how many entries we skip
+    skipped_count = 0
+
+    # 1) For “TimelineAddEntries,” parse tweets from each entry
     for instruction in instructions:
-        # "TimelineAddEntries" contains the main tweet entries
         if instruction.get("type") == "TimelineAddEntries":
-            entries = instruction.get("entries", [])
-            for entry in entries:
+            for entry in instruction.get("entries", []):
                 maybe_tweet = _extract_tweet_from_entry(entry)
                 if maybe_tweet is not None:
-                    all_tweets.append(maybe_tweet)
-                else: ignored += 1
-
-        # Some timelines have pinned tweets in "TimelinePinEntry"
+                    timeline_tweets.append(maybe_tweet)
+                else:
+                    skipped_count += 1
+        # 2) For “TimelinePinEntry,” handle pinned tweet (if we recognize it as the newest)
         elif instruction.get("type") == "TimelinePinEntry":
-            pinned_entry = instruction.get("entry", {})
+            pinned_entry = instruction.get("entry")
+            if pinned_entry:
+                pinned_sort_index = pinned_entry.get("sortIndex", "")
+                maybe_tweet = _extract_tweet_from_entry(pinned_entry)
+                if maybe_tweet is not None:
+                    pinned_tweet = maybe_tweet
+                else:
+                    skipped_count += 1
 
-    # If there's a pinned tweet entry, handle that as well
-    if pinned_entry:
-        maybe_tweet = _extract_tweet_from_entry(pinned_entry)
-        if maybe_tweet is not None:
-            all_tweets.append(maybe_tweet)
-        else: ignored += 1
+    # 3) If we found no normal timeline tweets at all, we can just return now
+    if not timeline_tweets and not pinned_tweet:
+        return ([], skipped_count)
 
-    if len(all_tweets) > limit: 
-        print(f"retrieved too many tweets! {len(all_tweets)} > {limit}")
-        all_tweets = all_tweets[:int(limit-1)]
+    # Determine the max sort_index among normal timeline tweets
+    max_sort_index = max((t.sort_index for t in timeline_tweets), default="")
 
-    return (all_tweets, ignored)
+    # 4) Only add pinned_tweet if its sortIndex is >= the highest sortIndex of normal tweets
+    if pinned_tweet and pinned_sort_index and pinned_sort_index >= max_sort_index:
+        timeline_tweets.append(pinned_tweet)
+    elif pinned_tweet:
+        # We skip pinned tweet if it’s not the newest
+        skipped_count += 1
+
+    # 5) Sort tweets by sort_index descending so the newest tweets come first
+    timeline_tweets.sort(key=lambda t: t.sort_index, reverse=True)
+
+    return (timeline_tweets, skipped_count)
 
 def _extract_tweet_from_entry(entry: Dict[str, Any]) -> Optional[Tweet]:
-    content = entry.get("content")
-    if not content:
+    """
+    Helper function to parse a single entry into a Tweet. Returns None if invalid or not a tweet.
+    """
+    sort_index = entry.get("sortIndex", "")
+
+    content = entry.get("content", {})
+    entry_type = content.get("entryType")
+
+    # Some entries are “TimelineTimelineModule” (like a conversation), containing multiple “items.”
+    if entry_type == "TimelineTimelineModule":
+        module_items = content.get("items", [])
+        # Return first valid tweet from the module. If you expect multiple tweets, adapt accordingly.
+        for mod_item in module_items:
+            mod_tweet = _extract_tweet_from_entry(mod_item)
+            if mod_tweet is not None:
+                # Inherit sort_index if the module itself had one
+                if sort_index and not mod_tweet.sort_index:
+                    mod_tweet.sort_index = sort_index
+                return mod_tweet
         return None
 
-    # "TimelineTimelineItem" or "TimelinePinEntry" with an item type of "TimelineTweet" 
-    # is where the tweet data resides.
-    if content.get("__typename") != "TimelineTimelineItem":
-        # Or, if pinned: content.get("__typename") could be "TimelineTimelineItem"
-        # but check item content. We'll unify logic below.
-        pass
+    # If it’s a single tweet entry
+    if entry_type == "TimelineTimelineItem":
+        item_content = content.get("itemContent", {})
+        tweet_data = item_content.get("tweet_results", {}).get("result")
+        if not tweet_data:
+            return None
 
-    item_content = content.get("itemContent")
-    if not item_content:
-        # Could be a module (like a conversation), so we check that too.
-        # Some conversation items have "items" -> ... -> "tweet_results"
-        if content.get("entryType") == "TimelineTimelineModule":
-            module_items = content.get("items", [])
-            for mod_item in module_items:
-                mod_tweet = _extract_tweet_from_entry(mod_item)
-                if mod_tweet is not None:
-                    return mod_tweet
-        return None
+        legacy = tweet_data.get("legacy")
+        if not legacy:
+            return None
 
-    tweet_data = item_content.get("tweet_results", {}).get("result")
-    if not tweet_data:
-        return None
+        tweet_id = legacy.get("id_str", "")
+        created_at = legacy.get("created_at", "")
+        full_text = legacy.get("full_text", "")
+        favorite_count = legacy.get("favorite_count", 0)
+        retweet_count = legacy.get("retweet_count", 0)
 
-    # The “legacy” portion usually has the tweet’s main details.
-    legacy = tweet_data.get("legacy")
-    if not legacy:
-        return None
-        
-    # Skip replies
-    if legacy.get("in_reply_to_user_id"):
-        return None
+        # Extract user info
+        core_user_data = tweet_data.get("core", {}).get("user_results", {}).get("result", {})
+        user_legacy = core_user_data.get("legacy", {})
+        user_id = user_legacy.get("id_str", "")
+        screen_name = user_legacy.get("screen_name", "")
+        name = user_legacy.get("name", "")
+        description = user_legacy.get("description", "")
+        statuses_count = user_legacy.get("statuses_count", 0)
 
-    tweet_id = legacy.get("id_str")
-    full_text = legacy.get("full_text", "")
-    created_at = legacy.get("created_at", "")
-    favorite_count = legacy.get("favorite_count", 0)
-    retweet_count = legacy.get("retweet_count", 0)
-
-    # Extract user info
-    user_data = tweet_data.get("core", {}) \
-                          .get("user_results", {}) \
-                          .get("result", {})
-    user_legacy = user_data.get("legacy", {})
-    screen_name = user_legacy.get("screen_name", "")
+        media = legacy.get("entities", {}) \
+                          .get("media", [])
+        media_urls = [m.get("media_url_https", "") for m in media]
     
-    # Extract media URLs
-    media = legacy.get("entities", {}) \
-                  .get("media", [])
-    media_urls = [m.get("media_url_https", "") for m in media]
+        if legacy.get("is_quote_status"):
+            quoted_status = get_tweet(legacy.get("quoted_status_id_str"))
+            if not quoted_status:
+                full_text = full_text + "\n[Failed to fetch original tweet]"
+            else: 
+                full_text = full_text + "\nOriginal Tweet:\n" + quoted_status.full_text
 
-    if legacy.get("is_quote_status"):
-        quoted_status = get_tweet(legacy.get("quoted_status_id_str"))
-        if not quoted_status:
-            full_text = full_text + "\n[Failed to fetch original tweet]"
-        else: 
-            full_text = full_text + "\nOriginal Tweet:\n" + quoted_status.full_text
 
-    return Tweet(
-        tweet_id=tweet_id,
-        created_at=created_at,
-        full_text=full_text,
-        favorite_count=favorite_count,
-        retweet_count=retweet_count,
-        author=screen_name,
-        media=media_urls
-    )
+        return Tweet(
+            tweet_id=tweet_id,
+            created_at=created_at,
+            full_text=full_text,
+            favorite_count=favorite_count,
+            retweet_count=retweet_count,
+            author=screen_name,
+            sort_index=sort_index,
+            media=media_urls
+        )
+
+    return None

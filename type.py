@@ -21,3 +21,4 @@ class Tweet:
     retweet_count: int
     author: str
     media: List[str]
+    sort_index: str
