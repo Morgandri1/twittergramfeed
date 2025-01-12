@@ -8,6 +8,16 @@ from time import sleep, time
 from telebot import TeleBot
 from threading import Thread
 from sqlalchemy import func
+from dateutil.parser import parse as parse_date
+from datetime import datetime, time as dTime, date
+
+def ensure_datetime(d):
+    """Convert a date (or datetime) into a datetime with time.min if needed."""
+    if isinstance(d, datetime):
+        return d
+    elif isinstance(d, date):
+        return datetime.combine(d, dTime.min)
+    return None
 
 s = scheduler(time, sleep)
 load_dotenv()
@@ -16,41 +26,47 @@ bot = TeleBot(environ.get("TELEGRAM_TOKEN", ""))
 def check_accounts():
     session = SessionLocal()
     accounts = session.query(Database).filter(Database.active == True).all()
-    
-    # Grab DB data
-    uids = [str(a.uid) for a in accounts]
-    last_counts = [int(a.last_count) for a in accounts]
 
-    # Query the “should_check_batch” in one go
-    check_info = list(should_check_batch(uids, last_counts))
+    for acc in accounts:
+        # Decide how many new tweets we might fetch
+        (account_uid, difference) = next(
+            should_check_batch([acc.uid], [float(acc.last_count)]),
+            (None, 0)
+        )
+        if not account_uid or difference <= 0:
+            continue  # Nothing new; skip
 
-    for i, (account_uid, difference) in enumerate(check_info):
-        if difference < 0:
-            difference = 0
+        # Fetch tweets (cap difference in case it is huge)
+        tweets, ignored = get_tweets(account_uid, min(difference, 20))
+        if not tweets:
+            continue
 
-        if difference > 0:
-            # Fetch new tweets
-            tweets, ignored = get_tweets(account_uid, difference)
+        # For each fetched tweet, compare creation time to acc.last_checked:
+        new_tweets_to_send = []
+        acc_last_checked_dt = ensure_datetime(acc.last_checked)  # Also a datetime
+        for tweet in tweets:
+            tweet_created = parse_date(tweet.created_at)  # This is a datetime
+            if acc_last_checked_dt and tweet_created <= acc_last_checked_dt:
+                # Skip, because it's older or equal to the last_checked
+                continue
+            new_tweets_to_send.append(tweet)
 
-            # Post the tweets we want
-            for tw in tweets:
-                # If pinned or old, skip. Or if you want pinned, handle accordingly.
-                # Right now, we just send them all:
-                if tw.full_text.endswith("..."):
-                    tw = get_tweet(tw.tweet_id) or tw
-                send_tweet(tw.full_text, tw.media, tw.author, tw.tweet_id)
+        # Send only the new tweets
+        for tweet in new_tweets_to_send:
+            send_tweet(tweet.full_text, tweet.media, tweet.author, tweet.tweet_id)
 
-            if ignored:
-                user_info = session.query(Database).filter(Database.uid == account_uid).first()
-                if user_info:
-                    session.query(Database).filter(Database.uid == account_uid).update(
-                        {"last_count": float(user_info.last_count) + ignored}
-                    )
+        # Optionally, move last_checked to now (or to max tweet_created if you prefer).
+        # Using the newest tweet’s DateTime can help avoid edge cases.
+        if new_tweets_to_send:
+            # Pick the largest creation time among tweets you actually sent
+            newest_tweet_time = max(parse_date(t.created_at) for t in new_tweets_to_send)
+            acc.last_checked = max(acc.last_checked, newest_tweet_time)
+        else:
+            # If no tweets were sent, just update last_checked to now
+            acc.last_checked = datetime.now()
 
     session.commit()
     session.close()
-
-    # Reschedule
     s.enter(90, 1, check_accounts)
     
 def set_baseline():
@@ -63,8 +79,8 @@ def set_baseline():
     for (account, baseline) in baselines:
         session.query(Database) \
             .filter(Database.uid == account) \
-            .update({"last_count": baseline})
-        session.commit()
+            .update({"last_count": baseline, "last_checked": datetime.now()})
+    session.commit()
     print("Updated all accounts' baseline statuses_count.")
     session.close()
 
