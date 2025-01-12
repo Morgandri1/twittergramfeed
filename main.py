@@ -79,7 +79,7 @@ def check_accounts():
     
             # Otherwise, send the tweet
             session.query(Database).filter(Database.uid == acc.uid).update({"last_count": acc.last_count + 1, "last_checked": datetime.now(), "last_id": tweet.tweet_id})
-            send_tweet(tweet.full_text, tweet.media, tweet.author, tweet.tweet_id)
+            send_tweet(tweet.full_text, tweet.media, tweet.author, tweet.tweet_id, tweet.created_at)
         
         # Optionally, move last_checked to now (or to max tweet_created if you prefer).
         # Using the newest tweet’s DateTime can help avoid edge cases.
@@ -110,7 +110,7 @@ def set_baseline():
     print("Updated all accounts' baseline statuses_count.")
     session.close()
 
-def send_tweet(content: str, media: list[str], author: str, tid: str):
+def send_tweet(content: str, media: list[str], author: str, tid: str, timestamp: str):
     try:
         bot.send_message(
             environ.get("CHAT_ID", ""), 
@@ -139,7 +139,7 @@ def send_tweet(content: str, media: list[str], author: str, tid: str):
         print(f"Failed to send tweet: {e}")
         bot.send_message(
             environ.get("CHAT_ID", ""), 
-            f"{author}: {content}" + '\n' + '\n'.join(media),
+            f"{author}: {content}" + '\n' + '\n'.join(media) + "\n\n" + ,
         )
     
 @bot.message_handler(commands=["subscribe"])
