@@ -78,7 +78,7 @@ def check_accounts():
                 continue
     
             # Otherwise, send the tweet
-            session.query(Database).filter(Database.uid == acc.uid).update({"last_count": acc.last_count + 1, "last_checked": datetime.now(), "last_id": tweet.tweet_id})
+            session.query(Database).filter(Database.uid == acc.uid).update({"last_count": acc.last_count + 1, "last_checked": datetime.utcnow(), "last_id": tweet.tweet_id})
             send_tweet(tweet.full_text, tweet.media, tweet.author, tweet.tweet_id, tweet.created_at)
         
         # Optionally, move last_checked to now (or to max tweet_created if you prefer).
@@ -89,7 +89,7 @@ def check_accounts():
             acc.last_checked = max(acc.last_checked, newest_tweet_time)
         else:
             # If no tweets were sent, just update last_checked to now
-            acc.last_checked = datetime.now()
+            acc.last_checked = datetime.utcnow()
 
     session.commit()
     session.close()
@@ -105,7 +105,7 @@ def set_baseline():
     for (account, baseline) in baselines:
         session.query(Database) \
             .filter(Database.uid == account) \
-            .update({"last_count": baseline, "last_checked": datetime.now()})
+            .update({"last_count": baseline, "last_checked": datetime.utcnow()})
     session.commit()
     print("Updated all accounts' baseline statuses_count.")
     session.close()
