@@ -27,6 +27,8 @@ def get_tweet(tweet_id: str):
     req = requests.get(URL + "/tweet", params={"pid": tweet_id}, headers=HEADERS)
     try:
         data = req.json().get("tweet")
+        if not data:
+            raise ValueError("Failed to get tweet.")
         if data.get("note_tweet", False):
             return Tweet(
                 tweet_id,
@@ -246,7 +248,10 @@ def _extract_tweet_from_entry(entry: Dict[str, Any]) -> Optional[Tweet]:
         media_urls = [m.get("media_url_https", "") for m in media]
     
         if legacy.get("is_quote_status"):
-            quoted_status = get_tweet(legacy.get("quoted_status_id_str"))
+            try:
+                quoted_status = get_tweet(legacy.get("quoted_status_id_str"))
+            except ValueError:
+                quoted_status = None
             if not quoted_status:
                 full_text = full_text + "\n[Failed to fetch original tweet]"
             else: 

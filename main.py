@@ -1,7 +1,7 @@
 from os import environ
 
 from database import Bot as Database, add_watched_account, SessionLocal
-from twitter import should_check_batch, get_tweets, get_user_from_handle, get_handle, get_baseline, get_tweet
+from twitter import should_check_batch, get_tweets, get_user_from_handle, get_handle, get_baseline
 from dotenv import load_dotenv
 from sched import scheduler
 from time import sleep, time
