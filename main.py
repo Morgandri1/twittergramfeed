@@ -103,8 +103,12 @@ def send_tweet(content: str, media: list[str], author: str, tid: str):
 @bot.message_handler(commands=["subscribe"])
 def subscribe(message):
     try:
+        session = SessionLocal()
         link = message.text.split(" ")[1]
         handle = get_handle(link)
+        if session.query(Database).filter(func.lower(Database.username) == handle.lower()).first():
+            session.query(Database).filter(func.lower(Database.username) == handle.lower()).update({"active": True})
+            return bot.reply_to(message, f"resubscribed to {handle}")
         user = get_user_from_handle(handle)
         if not user: raise ValueError("Failed to get user.")
         uid = user["rest_id"]
