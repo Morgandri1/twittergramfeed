@@ -19,14 +19,22 @@ def ensure_datetime(d):
         return datetime.combine(d, dTime.min)
     return None
     
-def to_utc_aware(dt: datetime) -> datetime:
+def to_utc_aware(dt: date | datetime) -> datetime:
     """
-    Convert a datetime (naive or aware) to an aware datetime in UTC.
-    If dt is naive, we treat it as if it were UTC.
+    Convert a date or datetime into an aware datetime in UTC.
+    - If dt is a date (with no time), combine it with the minimal time.
+    - If dt is a naive datetime, replace tzinfo with UTC.
+    - If dt is already offset-aware, convert it to UTC.
     """
+    if isinstance(dt, date) and not isinstance(dt, datetime):
+        # Convert bare date to a naive datetime (midnight)
+        dt = datetime.combine(dt, dTime.min)
+    # Now dt is definitely a datetime object
     if dt.tzinfo is None:
+        # Naive -> treat as UTC
         return dt.replace(tzinfo=timezone.utc)
     else:
+        # Aware -> convert to UTC
         return dt.astimezone(timezone.utc)
 
 s = scheduler(time, sleep)
