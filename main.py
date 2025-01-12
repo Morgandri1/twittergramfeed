@@ -76,7 +76,7 @@ def check_accounts():
                 continue
     
             # Otherwise, send the tweet
-            session.query(Database).filter(Database.uid == acc.uid).update({"last_count": tweet.sort_index, "last_checked": datetime.now()})
+            session.query(Database).filter(Database.uid == acc.uid).update({"last_count": acc.last_count + 1, "last_checked": datetime.now()})
             send_tweet(tweet.full_text, tweet.media, tweet.author, tweet.tweet_id)
         
         # Optionally, move last_checked to now (or to max tweet_created if you prefer).
