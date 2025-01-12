@@ -9,7 +9,7 @@ from telebot import TeleBot
 from threading import Thread
 from sqlalchemy import func
 from dateutil.parser import parse as parse_date
-from datetime import datetime, time as dTime, date
+from datetime import datetime, timezone, time as dTime, date
 
 def ensure_datetime(d):
     """Convert a date (or datetime) into a datetime with time.min if needed."""
@@ -18,6 +18,16 @@ def ensure_datetime(d):
     elif isinstance(d, date):
         return datetime.combine(d, dTime.min)
     return None
+    
+def to_utc_aware(dt: datetime) -> datetime:
+    """
+    Convert a datetime (naive or aware) to an aware datetime in UTC.
+    If dt is naive, we treat it as if it were UTC.
+    """
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    else:
+        return dt.astimezone(timezone.utc)
 
 s = scheduler(time, sleep)
 load_dotenv()
@@ -45,16 +55,21 @@ def check_accounts():
         new_tweets_to_send = []
         acc_last_checked_dt = ensure_datetime(acc.last_checked)  # Also a datetime
         for tweet in tweets:
-            tweet_created = parse_date(tweet.created_at)  # This is a datetime
-            if acc_last_checked_dt and tweet_created <= acc_last_checked_dt:
-                # Skip, because it's older or equal to the last_checked
+            tweet_created = parse_date(tweet.created_at)   # Usually an offset-aware dt
+            acc_last_checked_dt = acc.last_checked            # Possibly naive
+            if not acc_last_checked_dt:
+                acc_last_checked_dt = datetime.utcnow()       # or a default
+    
+            # Convert BOTH to UTC-aware
+            tweet_created_utc = to_utc_aware(tweet_created)
+            acc_last_checked_utc = to_utc_aware(acc_last_checked_dt)
+    
+            if tweet_created_utc <= acc_last_checked_utc:
                 continue
-            new_tweets_to_send.append(tweet)
-
-        # Send only the new tweets
-        for tweet in new_tweets_to_send:
+    
+            # Otherwise, send the tweet
             send_tweet(tweet.full_text, tweet.media, tweet.author, tweet.tweet_id)
-
+        
         # Optionally, move last_checked to now (or to max tweet_created if you prefer).
         # Using the newest tweet’s DateTime can help avoid edge cases.
         if new_tweets_to_send:
