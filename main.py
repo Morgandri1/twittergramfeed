@@ -108,6 +108,8 @@ def subscribe(message):
         handle = get_handle(link)
         if session.query(Database).filter(func.lower(Database.username) == handle.lower()).first():
             session.query(Database).filter(func.lower(Database.username) == handle.lower()).update({"active": True})
+            session.commit()
+            session.close()
             return bot.reply_to(message, f"resubscribed to {handle}")
         user = get_user_from_handle(handle)
         if not user: raise ValueError("Failed to get user.")
