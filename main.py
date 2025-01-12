@@ -74,9 +74,11 @@ def check_accounts():
     
             if tweet_created_utc <= acc_last_checked_utc:
                 continue
+            if float(acc.last_id) <= float(tweet.tweet_id):
+                continue
     
             # Otherwise, send the tweet
-            session.query(Database).filter(Database.uid == acc.uid).update({"last_count": acc.last_count + 1, "last_checked": datetime.now()})
+            session.query(Database).filter(Database.uid == acc.uid).update({"last_count": acc.last_count + 1, "last_checked": datetime.now(), "last_id": tweet.tweet_id})
             send_tweet(tweet.full_text, tweet.media, tweet.author, tweet.tweet_id)
         
         # Optionally, move last_checked to now (or to max tweet_created if you prefer).

@@ -34,6 +34,7 @@ class Bot(Base):
     added_by = Column(String)
     last_count = Column(Numeric)
     last_checked = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    last_id = Column(String)
     added = Column(DateTime, default=datetime.now)
     active = Column(Boolean, default=True)
 
