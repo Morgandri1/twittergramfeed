@@ -139,7 +139,7 @@ def send_tweet(content: str, media: list[str], author: str, tid: str, timestamp:
         print(f"Failed to send tweet: {e}")
         bot.send_message(
             environ.get("CHAT_ID", ""), 
-            f"{author}: {content}" + '\n' + '\n'.join(media) + "\n\n" + ,
+            f"{author}: {content}" + '\n' + '\n'.join(media) + "\n\n" + timestamp,
         )
     
 @bot.message_handler(commands=["subscribe"])

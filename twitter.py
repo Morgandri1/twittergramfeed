@@ -95,7 +95,7 @@ def get_tweets(uid: str, count: int = 20):
         return parse_tweets(req.json())
     except KeyError:
         print(req.json())
-        return []
+        return [], 0
     
 def get_most_recent_tweet(uid: str):
     req = requests.get(URL + "/user-tweets", params={"user":uid,"count":1}, headers=HEADERS)
