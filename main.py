@@ -74,7 +74,7 @@ def check_accounts():
     
             if tweet_created_utc <= acc_last_checked_utc:
                 continue
-            if float(acc.last_id) <= float(tweet.tweet_id):
+            if !!acc.last_id and (acc.last_id) <= float(tweet.tweet_id):
                 continue
     
             # Otherwise, send the tweet
