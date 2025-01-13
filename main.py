@@ -202,7 +202,8 @@ def list_accounts(message):
 def restart(message):
     try:
         bot.reply_to(message, "Restarting...")
-        s.enter(0, 1, check_accounts)
+        if not s.queue:
+            s.enter(0, 5, check_accounts)
     except Exception as e:
         bot.reply_to(message, f"Failed to restart: {e}")
   
