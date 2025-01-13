@@ -197,6 +197,14 @@ def list_accounts(message):
         bot.reply_to(message, f"Failed to list: {e}")
     finally:
         session.close()
+        
+@bot.message_handler(commands=["restart"])
+def restart(message):
+    try:
+        bot.reply_to(message, "Restarting...")
+        s.enter(0, 1, check_accounts)
+    except Exception as e:
+        bot.reply_to(message, f"Failed to restart: {e}")
   
 def verify_channel():
     try:
