@@ -42,57 +42,60 @@ load_dotenv()
 bot = TeleBot(environ.get("TELEGRAM_TOKEN", ""))
 
 def check_accounts():
-    session = SessionLocal()
-    accounts = session.query(Database).filter(Database.active == True).all()
-
-    for acc in accounts:
-        # Decide how many new tweets we might fetch
-        (account_uid, difference) = next(
-            should_check_batch([acc.uid], [float(acc.last_count)]),
-            (None, 0)
-        )
-        if not account_uid or difference <= 0:
-            continue  # Nothing new; skip
-
-        # Fetch tweets (cap difference in case it is huge)
-        tweets, ignored = get_tweets(account_uid, min(difference, 20))
-        if not tweets:
-            continue
-
-        # For each fetched tweet, compare creation time to acc.last_checked:
-        new_tweets_to_send = []
-        acc_last_checked_dt = ensure_datetime(acc.last_checked)  # Also a datetime
-        for tweet in tweets:
-            tweet_created = parse_date(tweet.created_at)   # Usually an offset-aware dt
-            acc_last_checked_dt = acc.last_checked            # Possibly naive
-            if not acc_last_checked_dt:
-                acc_last_checked_dt = datetime.utcnow()       # or a default
+    try:
+        session = SessionLocal()
+        accounts = session.query(Database).filter(Database.active == True).all()
     
-            # Convert BOTH to UTC-aware
-            tweet_created_utc = to_utc_aware(tweet_created)
-            acc_last_checked_utc = to_utc_aware(acc_last_checked_dt)
+        for acc in accounts:
+            # Decide how many new tweets we might fetch
+            (account_uid, difference) = next(
+                should_check_batch([acc.uid], [float(acc.last_count)]),
+                (None, 0)
+            )
+            if not account_uid or difference <= 0:
+                continue  # Nothing new; skip
     
-            if tweet_created_utc <= acc_last_checked_utc:
-                continue
-            if acc.last_id and float(acc.last_id) >= float(tweet.tweet_id):
+            # Fetch tweets (cap difference in case it is huge)
+            tweets, ignored = get_tweets(account_uid, min(difference, 20))
+            if not tweets:
                 continue
     
-            # Otherwise, send the tweet
-            session.query(Database).filter(Database.uid == acc.uid).update({"last_count": acc.last_count + 1, "last_checked": datetime.utcnow(), "last_id": tweet.tweet_id})
-            send_tweet(tweet.full_text, tweet.media, tweet.author, tweet.tweet_id, tweet.created_at)
+            # For each fetched tweet, compare creation time to acc.last_checked:
+            new_tweets_to_send = []
+            acc_last_checked_dt = ensure_datetime(acc.last_checked)  # Also a datetime
+            for tweet in tweets:
+                tweet_created = parse_date(tweet.created_at)   # Usually an offset-aware dt
+                acc_last_checked_dt = acc.last_checked            # Possibly naive
+                if not acc_last_checked_dt:
+                    acc_last_checked_dt = datetime.utcnow()       # or a default
         
-        # Optionally, move last_checked to now (or to max tweet_created if you prefer).
-        # Using the newest tweet’s DateTime can help avoid edge cases.
-        if new_tweets_to_send:
-            # Pick the largest creation time among tweets you actually sent
-            newest_tweet_time = max(parse_date(t.created_at) for t in new_tweets_to_send)
-            acc.last_checked = max(acc.last_checked, newest_tweet_time)
-        else:
-            # If no tweets were sent, just update last_checked to now
-            acc.last_checked = datetime.utcnow()
-
-    session.commit()
-    session.close()
+                # Convert BOTH to UTC-aware
+                tweet_created_utc = to_utc_aware(tweet_created)
+                acc_last_checked_utc = to_utc_aware(acc_last_checked_dt)
+        
+                if tweet_created_utc <= acc_last_checked_utc:
+                    continue
+                if acc.last_id and float(acc.last_id) >= float(tweet.tweet_id):
+                    continue
+        
+                # Otherwise, send the tweet
+                session.query(Database).filter(Database.uid == acc.uid).update({"last_count": acc.last_count + 1, "last_checked": datetime.utcnow(), "last_id": tweet.tweet_id})
+                send_tweet(tweet.full_text, tweet.media, tweet.author, tweet.tweet_id, tweet.created_at)
+            
+            # Optionally, move last_checked to now (or to max tweet_created if you prefer).
+            # Using the newest tweet’s DateTime can help avoid edge cases.
+            if new_tweets_to_send:
+                # Pick the largest creation time among tweets you actually sent
+                newest_tweet_time = max(parse_date(t.created_at) for t in new_tweets_to_send)
+                acc.last_checked = max(acc.last_checked, newest_tweet_time)
+            else:
+                # If no tweets were sent, just update last_checked to now
+                acc.last_checked = datetime.utcnow()
+    
+        session.commit()
+        session.close()
+    except Exception as e:
+        print(e)
     s.enter(90, 1, check_accounts)
     
 def set_baseline():
