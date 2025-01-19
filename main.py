@@ -96,7 +96,7 @@ def check_accounts():
         session.close()
     except Exception as e:
         print(e)
-    s.enter(90, 1, check_accounts)
+    s.enter(180, 1, check_accounts)
     
 def set_baseline():
     """
